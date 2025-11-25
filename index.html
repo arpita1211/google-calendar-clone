@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Google Calendar Clone — Month View</title>
+  <style>
+    /* --- Reset & base --- */
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#3b82f6; --muted:#94a3b8; --glass: rgba(255,255,255,0.04);
+      --rounded:12px; --shadow: 0 6px 18px rgba(2,6,23,0.6);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;color:#e6eef6;background:linear-gradient(180deg,#071029 0%, #07162a 60%);}
+    a{color:inherit}
+
+    /* --- App shell --- */
+    .app{max-width:1100px;margin:28px auto;padding:20px;border-radius:16px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:var(--shadow);}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#60a5fa);display:flex;align-items:center;justify-content:center;font-weight:700;color:white}
+    .title{font-size:18px;font-weight:600}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--glass);border:0;padding:8px 10px;border-radius:10px;color:var(--muted);cursor:pointer}
+    button.primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:white}
+
+    /* --- Calendar header --- */
+    .topbar{display:flex;align-items:center;gap:16px}
+    .month-name{font-size:20px;font-weight:700;color:white}
+
+    /* --- Grid --- */
+    .calendar{display:grid;grid-template-rows:auto 1fr;background:transparent}
+    .weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px}
+    .weekday{padding:8px 10px;border-radius:8px;color:var(--muted);text-align:center;font-weight:600}
+    .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+    .day{min-height:110px;padding:10px;border-radius:12px;background:transparent;border:1px solid rgba(255,255,255,0.03);position:relative}
+    .day.inactive{opacity:0.28}
+    .day .date{position:absolute;right:10px;top:8px;font-size:12px;color:var(--muted)}
+    .day .day-num{font-weight:700;color:#eaf2ff}
+    .events{margin-top:28px;display:flex;flex-direction:column;gap:6px}
+    .event{padding:6px 8px;border-radius:8px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .event.work{background:rgba(59,130,246,0.12);border-left:4px solid #3b82f6;color:#cfe6ff}
+    .event.personal{background:rgba(16,185,129,0.12);border-left:4px solid #10b981;color:#dff7ea}
+    .event.holiday{background:rgba(239,68,68,0.12);border-left:4px solid #ef4444;color:#ffeaea}
+
+    /* --- Modal --- */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:none;align-items:center;justify-content:center}
+    .modal{background:linear-gradient(180deg,#071026,#071229);padding:18px;border-radius:12px;width:360px;color:#e6eef6;box-shadow:0 12px 36px rgba(2,6,23,0.8)}
+    .modal h3{margin:0 0 8px}
+    .field{display:flex;flex-direction:column;margin-bottom:10px}
+    label{font-size:13px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .row{display:flex;gap:8px}
+
+    /* --- Small touches --- */
+    .today-badge{background:#112240;padding:6px 8px;border-radius:999px;color:var(--accent);font-weight:700}
+    .muted{color:var(--muted)}
+    .footer{margin-top:14px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
+
+    /* responsive */
+    @media(max-width:760px){.app{margin:10px;padding:12px}.modal{width:92vw}.day{min-height:100px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="logo">G</div>
+        <div>
+          <div class="title">Calendar Clone</div>
+          <div class="muted">Month view • Events in localStorage</div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="topbar">
+          <button id="todayBtn">Today</button>
+          <button id="prevBtn">◀</button>
+          <button id="nextBtn">▶</button>
+          <div style="width:14px"></div>
+          <div class="month-name" id="monthLabel">Month</div>
+        </div>
+        <button class="primary" id="newEventBtn">+ Create</button>
+      </div>
+    </header>
+
+    <main class="calendar">
+      <div class="weekdays" id="weekdays"></div>
+      <div class="grid" id="grid"></div>
+    </main>
+
+    <div class="footer">
+      <div id="status">Local-only • Events saved in this browser</div>
+      <div class="muted">Demo • No sign-in</div>
+    </div>
+  </div>
+
+  <!-- Modal for creating/viewing events -->
+  <div class="modal-backdrop" id="backdrop">
+    <div class="modal" role="dialog" aria-modal="true">
+      <h3 id="modalTitle">Create Event</h3>
+      <div class="field"><label>Title</label><input id="evtTitle" placeholder="Meeting, Birthday..."/></div>
+      <div class="row">
+        <div class="field" style="flex:1"><label>Date</label><input type="date" id="evtDate"/></div>
+        <div class="field" style="width:110px"><label>Time</label><input type="time" id="evtTime"/></div>
+      </div>
+      <div class="field"><label>Category</label>
+        <select id="evtCat"><option value="work">Work</option><option value="personal">Personal</option><option value="holiday">Holiday</option></select>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="evtNotes" rows="3" placeholder="Optional notes..."></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button id="deleteBtn" style="display:none">Delete</button>
+        <button id="closeBtn">Cancel</button>
+        <button class="primary" id="saveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Utilities ---
+    const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    // state
+    let state = {current: new Date(), events: {}};
+
+    // load events from localStorage (static, browser-only)
+    function loadEvents(){
+      try{
+        const raw = localStorage.getItem('static_calendar_events_v1');
+        state.events = raw ? JSON.parse(raw) : getSampleEvents();
+      }catch(e){ state.events = getSampleEvents(); }
+    }
+    function saveEvents(){ localStorage.setItem('static_calendar_events_v1', JSON.stringify(state.events)); }
+
+    function getSampleEvents(){
+      // preloaded demo events
+      return {
+        '2025-11-05': [{id:uid(),'title':'Project meeting','time':'10:30','cat':'work','notes':'Discuss milestones'}],
+        '2025-11-15': [{id:uid(),'title':'Mom\'s birthday','time':'','cat':'personal','notes':''}],
+        '2025-11-26': [{id:uid(),'title':'Conference','time':'09:00','cat':'work','notes':'Virtual - link in notes'}],
+      };
+    }
+
+    function uid(){return Math.random().toString(36).slice(2,9)}
+
+    // DOM refs
+    const weekdaysEl = document.getElementById('weekdays');
+    const gridEl = document.getElementById('grid');
+    const monthLabel = document.getElementById('monthLabel');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const todayBtn = document.getElementById('todayBtn');
+    const newEventBtn = document.getElementById('newEventBtn');
+
+    const backdrop = document.getElementById('backdrop');
+    const modalTitle = document.getElementById('modalTitle');
+    const evtTitle = document.getElementById('evtTitle');
+    const evtDate = document.getElementById('evtDate');
+    const evtTime = document.getElementById('evtTime');
+    const evtCat = document.getElementById('evtCat');
+    const evtNotes = document.getElementById('evtNotes');
+    const saveBtn = document.getElementById('saveBtn');
+    const closeBtn = document.getElementById('closeBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
+
+    let editing = null; // {date, id}
+
+    // render weekdays header
+    function renderWeekdays(){
+      weekdaysEl.innerHTML = '';
+      WEEKDAYS.forEach(d=>{ const el=document.createElement('div'); el.className='weekday'; el.textContent=d; weekdaysEl.appendChild(el); });
+    }
+
+    // render month grid
+    function render(){
+      const cur = new Date(state.current.getFullYear(), state.current.getMonth(), 1);
+      const year = cur.getFullYear();
+      const month = cur.getMonth();
+      monthLabel.textContent = `${MONTHS[month]} ${year}`;
+
+      // first day index and days in month
+      const firstDayIdx = cur.getDay();
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+
+      // previous month tail
+      const prevDays = new Date(year, month, 0).getDate();
+
+      gridEl.innerHTML = '';
+
+      // 42 cells (6 weeks) to keep stable layout
+      for(let i=0;i<42;i++){
+        const cell = document.createElement('div'); cell.className='day';
+        // compute day number and date
+        const cellIndex = i - firstDayIdx + 1;
+        let cellDate, inactive=false;
+        if(cellIndex<=0){ // prev month
+          const d = prevDays + cellIndex;
+          cellDate = new Date(year, month-1, d);
+          inactive = true;
+          cell.classList.add('inactive');
+        } else if(cellIndex>daysInMonth){ // next month
+          const d = cellIndex - daysInMonth;
+          cellDate = new Date(year, month+1, d);
+          inactive = true; cell.classList.add('inactive');
+        } else {
+          cellDate = new Date(year, month, cellIndex);
+        }
+
+        const iso = toISO(cellDate);
+        const dayNum = cellDate.getDate();
+
+        // date badge
+        const badge = document.createElement('div'); badge.className='date'; badge.innerHTML=`<div class="day-num">${dayNum}</div>`;
+        cell.appendChild(badge);
+
+        // click handler to open modal to create event
+        cell.addEventListener('click', (e)=>{
+          // prevent opening when clicking inside event element link
+          openCreateModal(iso);
+        });
+
+        // show 'today' marker
+        const today = new Date();
+        if(cellDate.toDateString() === today.toDateString()){
+          const t = document.createElement('div'); t.className='today-badge'; t.textContent='Today'; t.style.position='absolute'; t.style.left='10px'; t.style.top='8px'; cell.appendChild(t);
+        }
+
+        // events
+        const evList = state.events[iso] || [];
+        const eventsWrap = document.createElement('div'); eventsWrap.className='events';
+        evList.slice(0,3).forEach(ev=>{
+          const evEl = document.createElement('div'); evEl.className=`event ${ev.cat}`; evEl.textContent = (ev.time? ev.time + ' — ' : '') + ev.title;
+          evEl.addEventListener('click',(evClick)=>{ evClick.stopPropagation(); openViewModal(iso, ev.id); });
+          eventsWrap.appendChild(evEl);
+        });
+        if(evList.length>3){
+          const more = document.createElement('div'); more.className='muted'; more.style.fontSize='12px'; more.textContent = `+${evList.length-3} more`;
+          eventsWrap.appendChild(more);
+        }
+        cell.appendChild(eventsWrap);
+
+        gridEl.appendChild(cell);
+      }
+    }
+
+    function toISO(d){ const y=d.getFullYear(); const m=('0'+(d.getMonth()+1)).slice(-2); const day=('0'+d.getDate()).slice(-2); return `${y}-${m}-${day}` }
+
+    // navigation
+    prevBtn.addEventListener('click', ()=>{ state.current.setMonth(state.current.getMonth()-1); render(); });
+    nextBtn.addEventListener('click', ()=>{ state.current.setMonth(state.current.getMonth()+1); render(); });
+    todayBtn.addEventListener('click', ()=>{ state.current = new Date(); render(); });
+
+    // New event button
+    newEventBtn.addEventListener('click', ()=>{ openCreateModal(); });
+
+    // Modal control
+    function openCreateModal(dateISO){ editing = null; modalTitle.textContent='Create Event'; deleteBtn.style.display='none'; backdrop.style.display='flex';
+      evtTitle.value=''; evtNotes.value=''; evtCat.value='work'; evtTime.value='';
+      if(dateISO) evtDate.value = dateISO; else evtDate.value = toISO(new Date());
+      evtDate.focus();
+    }
+
+    function openViewModal(dateISO, id){ const list = state.events[dateISO]||[]; const ev = list.find(x=>x.id===id); if(!ev) return; editing = {date:dateISO,id:id}; modalTitle.textContent='Edit Event'; deleteBtn.style.display='inline-block'; backdrop.style.display='flex'; evtTitle.value=ev.title; evtNotes.value=ev.notes||''; evtCat.value=ev.cat||'work'; evtTime.value=ev.time||''; evtDate.value=dateISO; }
+
+    closeBtn.addEventListener('click', ()=>{ backdrop.style.display='none'; editing=null; });
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; editing=null } });
+
+    saveBtn.addEventListener('click', ()=>{
+      const title = evtTitle.value.trim(); const date = evtDate.value; if(!title || !date){ alert('Please provide title and date'); return; }
+      const evObj = {id: editing? editing.id : uid(), title, time: evtTime.value, cat: evtCat.value, notes: evtNotes.value };
+      state.events[date] = state.events[date] || [];
+      if(editing){ // replace
+        state.events[date] = state.events[date].map(x => x.id===evObj.id ? evObj : x);
+        // if date changed from original, remove original
+        if(editing.date !== date){ state.events[editing.date] = (state.events[editing.date]||[]).filter(x=>x.id!==evObj.id); if((state.events[editing.date]||[]).length===0) delete state.events[editing.date]; }
+      } else {
+        state.events[date].push(evObj);
+      }
+      saveEvents(); backdrop.style.display='none'; render();
+    });
+
+    deleteBtn.addEventListener('click', ()=>{
+      if(!editing) return; if(!confirm('Delete this event?')) return;
+      state.events[editing.date] = (state.events[editing.date]||[]).filter(x=>x.id!==editing.id);
+      if(state.events[editing.date].length===0) delete state.events[editing.date];
+      saveEvents(); backdrop.style.display='none'; render();
+    });
+
+    // initialize
+    (function init(){ renderWeekdays(); loadEvents(); render(); })();
+
+    // keyboard shortcuts
+    document.addEventListener('keydown',(e)=>{
+      if(e.key==='n' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); openCreateModal(); }
+      if(e.key==='ArrowLeft'){ state.current.setMonth(state.current.getMonth()-1); render(); }
+      if(e.key==='ArrowRight'){ state.current.setMonth(state.current.getMonth()+1); render(); }
+    });
+  </script>
+</body>
+</html>
